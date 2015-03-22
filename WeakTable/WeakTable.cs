@@ -315,14 +315,14 @@
       /// <summary>
       /// Creates a state instance.
       /// </summary>
-      /// <param name="weakTable">A WeakTable live weak reference.</param>
+      /// <param name="weakTableRef">A WeakTable live weak reference.</param>
       /// <param name="key">A key instance.</param>
-      public State(WeakReference<WeakTable<K, V>> weakTable, K key)
+      public State(WeakReference<WeakTable<K, V>> weakTableRef, K key)
       {
+        this.weakTableRef = weakTableRef;
         this.self = new WeakReference<State>(this, true);
-        this.weakTable = weakTable;
         this.key = key;
-        this.hasCode = Get(weakTable).Comparer.GetHashCode(key);
+        this.hasCode = Get(weakTableRef).Comparer.GetHashCode(key);
       }
 
       /// <summary>
@@ -330,7 +330,7 @@
       /// </summary>
       ~State()
       {
-        var weakTable = Get(this.weakTable);
+        var weakTable = Get(this.weakTableRef);
 
         if (weakTable != null)
         {
@@ -348,7 +348,7 @@
       /// <summary>
       /// A weak table weak reference.
       /// </summary>
-      public readonly WeakReference<WeakTable<K, V>> weakTable;
+      public readonly WeakReference<WeakTable<K, V>> weakTableRef;
 
       /// <summary>
       /// A key hashcode.
