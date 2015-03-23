@@ -322,7 +322,7 @@
         this.weakTableRef = weakTableRef;
         this.self = new WeakReference<State>(this, true);
         this.key = key;
-        this.hasCode = Get(weakTableRef).Comparer.GetHashCode(key);
+        this.hashCode = Get(weakTableRef).Comparer.GetHashCode(key);
       }
 
       /// <summary>
@@ -353,7 +353,7 @@
       /// <summary>
       /// A key hashcode.
       /// </summary>
-      public readonly int hasCode;
+      public readonly int hashCode;
 
       /// <summary>
       /// A key.
@@ -465,7 +465,7 @@
         {
           var state = Get(weakRef);
 
-          return state == null ? 0 : state.hasCode;
+          return state == null ? 0 : state.hashCode;
         }
 
         return obj == null ? 0 : obj.GetHashCode();
