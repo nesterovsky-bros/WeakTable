@@ -26,7 +26,7 @@
     /// </param>
     public WeakTable(IEqualityComparer<K> comparer = null)
     {
-      self = new WeakReference<WeakTable<K, V>>(this);
+      self = new WeakReference<WeakTable<K, V>>(this, true);
 
       if (comparer == null)
       {
