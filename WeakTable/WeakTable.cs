@@ -27,35 +27,17 @@
     public WeakTable(IEqualityComparer<K> comparer = null)
     {
       self = new WeakReference<WeakTable<K, V>>(this, true);
-
-      if (comparer == null)
-      {
-        comparer = EqualityComparer<K>.Default;
-      }
-
-      Comparer = comparer;
-
+      this.comparer = comparer ?? (comparer = EqualityComparer<K>.Default);
       values = new ConcurrentDictionary<object, WeakReference<State>>(
         new EqualityComparer { comparer = comparer });
     }
-
-    /// <summary>
-    /// A comparer instance used to match keys.
-    /// </summary>
-    public IEqualityComparer<K> Comparer { get; private set; }
 
     /// <summary>
     /// A key enumerator.
     /// </summary>
     public IEnumerable<K> Keys
     {
-      get
-      {
-        return values.Values.
-          Select(v => Get(v)).
-          Where(s => s != null).
-          Select(s => s.key);
-      }
+      get { return States.Select(s => s.key); }
     }
 
     /// <summary>
@@ -63,13 +45,7 @@
     /// </summary>
     public IEnumerable<V> Values
     {
-      get 
-      { 
-        return values.Values.
-          Select(v => Get(v)).
-          Where(s => s != null).
-          Select(v => v.value); 
-      }
+      get { return States.Select(s => s.value); }
     }
 
     /// <summary>
@@ -80,10 +56,7 @@
     /// </returns>
     public IEnumerator<KeyValuePair<K, V>> GetEnumerator()
     {
-      return values.
-        Select(e => Get(e.Value)).
-        Where(s => s != null).
-        Select(v => new KeyValuePair<K, V>(v.key, v.value)).
+      return States.Select(s => new KeyValuePair<K, V>(s.key, s.value)).
         GetEnumerator();
     }
 
@@ -119,14 +92,9 @@
     /// </summary>
     public void Clear()
     {
-      foreach(var entry in values)
+      foreach(var state in States)
       {
-        var state = Get(entry.Value);
-
-        if (state != null)
-        {
-          Remove(state.key);
-        }
+        Remove(state.key);
       }
     }
 
@@ -255,7 +223,7 @@
     /// <returns>true if this is a new value, and false otherwise.</returns>
     private bool GetOrAdd(K key, Func<K, V> createValue, out State value)
     {
-      var state = new State(self, key);
+      var state = new State(self, key, comparer.GetHashCode(key));
 
       do
       {
@@ -292,6 +260,14 @@
     }
 
     /// <summary>
+    /// States enumerator.
+    /// </summary>
+    private IEnumerable<State> States
+    {
+      get { return values.Values.Select(v => Get(v)).Where(s => s != null); }
+    }
+
+    /// <summary>
     /// Gets a target of a weak reference.
     /// </summary>
     /// <typeparam name="R">A target type.</typeparam>
@@ -317,12 +293,13 @@
       /// </summary>
       /// <param name="weakTableRef">A WeakTable live weak reference.</param>
       /// <param name="key">A key instance.</param>
-      public State(WeakReference<WeakTable<K, V>> weakTableRef, K key)
+      /// <param name="hashCode">A hash code.</param>
+      public State(WeakReference<WeakTable<K, V>> weakTableRef, K key, int hashCode)
       {
         this.weakTableRef = weakTableRef;
         this.self = new WeakReference<State>(this, true);
         this.key = key;
-        this.hashCode = Get(weakTableRef).Comparer.GetHashCode(key);
+        this.hashCode = hashCode;
       }
 
       /// <summary>
@@ -484,6 +461,11 @@
     // 6. Both keys and values are not stongly kept by this instance.
     //    This means that a value can strongly refer to a key, which won't 
     //    keep them from GC, if there are no more strong references to the key.
+
+    /// <summary>
+    /// A comparer instance used to match keys.
+    /// </summary>
+    private readonly IEqualityComparer<K> comparer;
 
     /// <summary>
     /// A dictionary storage.
