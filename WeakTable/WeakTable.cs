@@ -294,7 +294,7 @@
     /// <summary>
     /// Gets a target of a weak reference.
     /// </summary>
-    /// <typeparam name="T">A target type.</typeparam>
+    /// <typeparam name="R">A target type.</typeparam>
     /// <param name="value">A weak reference.</param>
     /// <returns>A target instance, or null.</returns>
     private static R Get<R>(WeakReference<R> value)
