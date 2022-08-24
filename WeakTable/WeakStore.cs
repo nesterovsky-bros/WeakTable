@@ -200,10 +200,12 @@ public class WeakStore<T>
 
     public void MakeHandles()
     {
+      (var keys, this.keys) = (this.keys, null);
+
       if (keys != null)
       {
+        var handles = new DependentHandle[keys.Length];
         var notifier = new Notifier { key = this };
-        var handles = new DependentHandle[keys!.Length];
 
         this.handles = handles;
 
@@ -211,8 +213,6 @@ public class WeakStore<T>
         {
           handles[i] = new DependentHandle(keys[i], notifier);
         }
-
-        keys = null;
       }
     }
 
