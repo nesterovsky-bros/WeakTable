@@ -24,8 +24,7 @@ public class WeakStore<T>
   /// <param name="keys">An array of keys.</param>
   /// <returns>An instance, if available.</returns>
   public T? Get(params object[] keys) =>
-    store.TryGetValue(new(keys), out var value) ?
-      value.value : default;
+    store.TryGetValue(new(keys), out var next) ? next.value : default;
 
   /// <summary>
   /// <para>Gets or creates an instance, if it was not in the store, by keys.</para>
@@ -53,6 +52,7 @@ public class WeakStore<T>
 
     if (key != next)
     {
+      key.store = null;
       key.Dispose();
     }
 
@@ -75,6 +75,7 @@ public class WeakStore<T>
       if (store.TryRemove(key, out var prev))
       {
         prevValue = prev.value;
+        prev.store = null;
         prev.Dispose();
       }
     }
@@ -100,6 +101,7 @@ public class WeakStore<T>
 
       if (next != key)
       {
+        key.store = null;
         key.Dispose();
       }
 
@@ -137,17 +139,29 @@ public class WeakStore<T>
       this.hashCode = hashCode;
     }
 
+    ~Key()
+    {
+      Dispose();
+    }
+
     public void Dispose()
     {
+      keys = null;
+
+      var handles = Interlocked.Exchange(ref this.handles, null);
+
       if (handles != null)
       {
-        for(var i = 0; i < handles.Length; ++i)
+        GC.SuppressFinalize(this);
+
+        for (var i = 0; i < handles.Length; ++i)
         {
           handles[i].Dispose();
         }
-
-        handles = null;
       }
+
+      var store = Interlocked.Exchange(ref this.store, null);
+      var value = Interlocked.Exchange(ref this.value, null);
 
       if (store != null)
       {
@@ -156,17 +170,11 @@ public class WeakStore<T>
         if (value != null)
         {
           store.Release(value);
-          value = default;
         }
-
-        store = null;
       }
     }
 
-    public override int GetHashCode()
-    {
-      return hashCode;
-    }
+    public override int GetHashCode() => hashCode;
 
     public override bool Equals(object? obj)
     {
@@ -200,7 +208,7 @@ public class WeakStore<T>
 
     public void MakeHandles()
     {
-      (var keys, this.keys) = (this.keys, null);
+      var keys = Interlocked.Exchange(ref this.keys, null);
 
       if (keys != null)
       {
