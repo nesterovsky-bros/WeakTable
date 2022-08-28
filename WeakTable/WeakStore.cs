@@ -130,9 +130,7 @@ public class WeakStore<T>
 
       for(var i = 0; i < keys.Length; ++i)
       {
-        var key = keys[i];
-
-        hashCode ^= key.GetHashCode();
+        hashCode ^= keys[i].GetHashCode();
       }
 
       this.keys = keys;
@@ -161,13 +159,14 @@ public class WeakStore<T>
       }
 
       var store = Interlocked.Exchange(ref this.store, null);
-      var value = Interlocked.Exchange(ref this.value, null);
 
       if (store != null)
       {
         store.store.TryRemove(this, out var _);
 
-        if (value != null)
+        var value = Interlocked.Exchange(ref this.value, null);
+
+        if(value != null)
         {
           store.Release(value);
         }
