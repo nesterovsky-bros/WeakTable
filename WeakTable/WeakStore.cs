@@ -14,17 +14,18 @@ namespace NesterovskyBros.Utils;
 /// </para>
 /// <para><b>Note:</b> class is thread safe.</para>
 /// </summary>
-/// <typeparam name="T">An instance type to store.</typeparam>
-public class WeakStore<T>
-  where T: class
+public class WeakStore
 {
   /// <summary>
   /// Gets an instance by keys.
   /// </summary>
+  /// <typeparam name="T">An instance type to store.</typeparam>
   /// <param name="keys">An array of keys.</param>
   /// <returns>An instance, if available.</returns>
-  public T? Get(params object[] keys) =>
-    store.TryGetValue(new(keys), out var next) ? next.value : default;
+  public T? Get<T>(params object[] keys)
+    where T : class =>
+    store.TryGetValue(new(keys), out var next) ?
+      (T?)next.value.Target : null;
 
   /// <summary>
   /// <para>Gets or creates an instance, if it was not in the store, by keys.</para>
@@ -32,10 +33,12 @@ public class WeakStore<T>
   /// Its computation should be short and simple, and must not attempt to
   /// update any other mappings of this store.</para>
   /// </summary>
+  /// <typeparam name="T">An instance type to store.</typeparam>
   /// <param name="create">An instance factory.</param>
   /// <param name="keys">An array of keys.</param>
   /// <returns>An instance.</returns>
-  public T? GetOrCreate(Func<T> create, params object[] keys)
+  public T? GetOrCreate<T>(Func<T> create, params object[] keys)
+    where T : class
   {
     var key = new Key(keys);
 
@@ -43,38 +46,40 @@ public class WeakStore<T>
       key,
       k =>
       {
-        k.value = create();
+        k.value = new(keys[0], create());
         k.store = this;
         k.MakeHandles();
 
         return k;
       });
 
-    if (key != next)
+    if(key != next)
     {
       key.store = null;
       key.Dispose();
     }
 
-    return next.value;
+    return (T?)next.value.Dependent;
   }
 
   /// <summary>
   /// Sets or removes an instance by keys.
   /// </summary>
+  /// <typeparam name="T">An instance type to store.</typeparam>
   /// <param name="value">A value to set, or <c>null</c> to remove.</param>
   /// <param name="keys">An array of keys.</param>
   /// <returns>A replaced instance, if any.</returns>
-  public T? Set(T? value, params object[] keys)
+  public T? Set<T>(T? value, params object[] keys)
+    where T : class
   {
     T? prevValue = default;
     var key = new Key(keys);
 
-    if (value == null)
+    if(value == null)
     {
-      if (store.TryRemove(key, out var prev))
+      if(store.TryRemove(key, out var prev))
       {
-        prevValue = prev.value;
+        prevValue = (T?)prev.value.Dependent;
         prev.store = null;
         prev.Dispose();
       }
@@ -85,27 +90,27 @@ public class WeakStore<T>
         key,
         k =>
         {
-          k.value = value;
+          k.value = new(keys[0], value);
           k.store = this;
           k.MakeHandles();
 
           return k;
-        }, 
+        },
         (k, v) =>
         {
-          prevValue = v.value;
-          v.value = value;
+          prevValue = (T?)v.value.Dependent;
+          v.value = new(keys[0], value);
 
           return v;
         });
 
-      if (next != key)
+      if(next != key)
       {
         key.store = null;
         key.Dispose();
       }
 
-      if ((prevValue != null) && (prevValue != value))
+      if((prevValue != null) && (prevValue != value))
       {
         Release(prevValue);
       }
@@ -118,14 +123,19 @@ public class WeakStore<T>
   /// Called when an instance is released.
   /// </summary>
   /// <param name="value">An instance to release.</param>
-  protected virtual void Release(T value)
+  protected virtual void Release(object value)
   {
   }
 
-  private class Key: IDisposable
+  private class Key : IDisposable
   {
     public Key(object[] keys)
     {
+      if((keys == null) || (keys.Length == 0))
+      {
+        throw new ArgumentException("Empty keys.", nameof(keys));
+      }
+
       var hashCode = 0;
 
       for(var i = 0; i < keys.Length; ++i)
@@ -144,31 +154,32 @@ public class WeakStore<T>
 
     public void Dispose()
     {
+      var store = Interlocked.Exchange(ref this.store, null);
+
+      if(store != null)
+      {
+        store.store.TryRemove(this, out var _);
+
+        var value = this.value.Dependent;
+
+        if(value != null)
+        {
+          this.value.Dependent = new();
+          store.Release(value);
+        }
+      }
+
       keys = null;
 
       var handles = Interlocked.Exchange(ref this.handles, null);
 
-      if (handles != null)
+      if(handles != null)
       {
         GC.SuppressFinalize(this);
 
-        for (var i = 0; i < handles.Length; ++i)
+        for(var i = 0; i < handles.Length; ++i)
         {
           handles[i].Dispose();
-        }
-      }
-
-      var store = Interlocked.Exchange(ref this.store, null);
-
-      if (store != null)
-      {
-        store.store.TryRemove(this, out var _);
-
-        var value = Interlocked.Exchange(ref this.value, null);
-
-        if(value != null)
-        {
-          store.Release(value);
         }
       }
     }
@@ -177,7 +188,7 @@ public class WeakStore<T>
 
     public override bool Equals(object? obj)
     {
-      if (this == obj)
+      if(this == obj)
       {
         return true;
       }
@@ -186,22 +197,22 @@ public class WeakStore<T>
       var length = keys?.Length ?? handles?.Length ?? 0;
       var thatLength = that.keys?.Length ?? that.handles?.Length ?? 0;
 
-      if (length != thatLength)
+      if(length != thatLength)
       {
         return false;
       }
-      
+
       for(var i = 0; i < length; ++i)
       {
         var value = keys?[i] ?? handles?[i].Target;
         var thatValue = that.keys?[i] ?? that.handles?[i].Target;
 
-        if ((value != thatValue) || (value == null))
+        if((value != thatValue) || (value == null))
         {
           return false;
         }
       }
-      
+
       return true;
     }
 
@@ -209,25 +220,24 @@ public class WeakStore<T>
     {
       var keys = Interlocked.Exchange(ref this.keys, null);
 
-      if (keys != null)
+      if(keys != null)
       {
         var handles = new DependentHandle[keys.Length];
-        var notifier = new Notifier { key = this };
 
         this.handles = handles;
 
         for(var i = 0; i < keys.Length; ++i)
         {
-          handles[i] = new DependentHandle(keys[i], notifier);
+          handles[i] = new DependentHandle(keys[i], new Notifier { key = this });
         }
       }
     }
 
     public readonly int hashCode;
-    public WeakStore<T>? store;
+    public WeakStore? store;
     public object[]? keys;
     public DependentHandle[]? handles;
-    public T? value;
+    public DependentHandle value;
   }
 
   private class Notifier
